@@ -60,10 +60,10 @@ def _order_data(order):
             "phone": order.phone,
             "email": order.email,
             "city": order.city,
-            "area": order.address,
-            "road": "",
-            "house": "",
-            "notes": "",
+            "area": order.area or order.address,
+            "road": order.road,
+            "house": order.house,
+            "notes": order.delivery_notes,
         },
         "subtotal": sum(item["product"]["price"] * item["qty"] for item in items),
         "shipping": order.shipping_fee,
@@ -82,7 +82,7 @@ def _order_data(order):
 @permission_classes([AllowAny])
 def create_order(request):
     data = request.data
-    required = ("name", "phone", "address", "city", "payment_method", "items")
+    required = ("name", "phone", "city", "payment_method", "items")
     missing = [key for key in required if not data.get(key)]
     if missing:
         return Response({"detail": "Missing required fields: " + ", ".join(missing)}, status=status.HTTP_400_BAD_REQUEST)
@@ -126,7 +126,13 @@ def create_order(request):
 
     name = str(data["name"]).strip()
     phone = str(data["phone"]).strip()
-    address = str(data["address"]).strip()
+    area = str(data.get("area", "")).strip()
+    road = str(data.get("road", "")).strip()
+    house = str(data.get("house", "")).strip()
+    notes = str(data.get("notes", "")).strip()
+    address = str(data.get("address", "")).strip()
+    if not address:
+        address = ", ".join(part for part in (house, road, area, notes) if part)
     city = str(data["city"]).strip()
     email = str(data.get("email", "")).strip()
     if not name or len(name) > 160 or not phone or len(phone) > 30 or not address or not city or len(city) > 100:
@@ -145,6 +151,10 @@ def create_order(request):
                 phone=phone,
                 email=email,
                 address=address,
+                area=area,
+                road=road,
+                house=house,
+                delivery_notes=notes,
                 city=city,
                 payment_method=payment_method,
                 payment_status="pending" if payment_method in ONLINE_PAYMENT_METHODS else "unpaid",
