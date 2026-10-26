@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from .models import Order, PaymentAttempt
 from .payment_services import (
     GatewayError,
+    mark_attempt_failed,
     start_bkash_payment,
     start_nagad_payment,
     verify_bkash_payment,
@@ -21,8 +22,8 @@ from .payment_services import (
 
 logger = logging.getLogger(__name__)
 PROVIDERS = {
-    "bkash": ("bKash", start_bkash_payment),
-    "nagad": ("Nagad", start_nagad_payment),
+    "bkash": "bKash",
+    "nagad": "Nagad",
 }
 
 
@@ -32,7 +33,8 @@ def start_payment(request, provider):
     provider_config = PROVIDERS.get(provider)
     if not provider_config:
         return Response({"detail": "Unsupported payment provider."}, status=status.HTTP_404_NOT_FOUND)
-    payment_method, start_gateway = provider_config
+    payment_method = provider_config
+    start_gateway = start_bkash_payment if provider == "bkash" else start_nagad_payment
     order_number = str(request.data.get("order_number", "")).strip()
     order = Order.objects.filter(order_number=order_number, user=request.user).first()
     if not order:
@@ -50,8 +52,7 @@ def start_payment(request, provider):
     try:
         redirect_url = start_gateway(order, attempt)
     except GatewayError as error:
-        attempt.status = "failed"
-        attempt.save(update_fields=["status", "updated_at"])
+        mark_attempt_failed(attempt)
         logger.warning("%s payment initialization failed for order %s: %s", provider, order.order_number, error)
         return Response({"detail": str(error)}, status=status.HTTP_502_BAD_GATEWAY)
     return Response({"redirect_url": redirect_url}, status=status.HTTP_200_OK)
@@ -91,14 +92,25 @@ def _frontend_payment_result(order_number, result, *, payment_id=""):
 def bkash_callback(request):
     order_number = request.GET.get("order_number", "")
     payment_id = request.GET.get("paymentID", "")
-    provider_status = request.GET.get("status", "")
-    if not order_number or not payment_id or provider_status.lower() != "success":
-        return _frontend_payment_result(order_number, "cancelled")
+    provider_status = request.GET.get("status", "").lower()
+    if not order_number or not payment_id or provider_status != "success":
+        if provider_status in {"cancel", "cancelled", "failure", "failed", "error"}:
+            attempt = PaymentAttempt.objects.filter(
+                order__order_number=order_number,
+                provider="bkash",
+                provider_payment_id=payment_id,
+                status__in=["created", "pending"],
+            ).first()
+            if attempt:
+                mark_attempt_failed(attempt)
+        result = "cancelled" if provider_status in {"cancel", "cancelled"} else "failed"
+        return _frontend_payment_result(order_number, result)
     return _frontend_payment_result(order_number, "return", payment_id=payment_id)
 
 
 @require_GET
 def nagad_callback(request):
+    provider_status = request.GET.get("status", "").lower()
     payment_reference = (
         request.GET.get("payment_ref_id")
         or request.GET.get("paymentReferenceId")
@@ -112,10 +124,12 @@ def nagad_callback(request):
     if not attempt:
         logger.warning("Nagad callback did not match a local payment attempt.")
         return _frontend_payment_result("", "failed")
+    if provider_status in {"cancel", "cancelled", "failure", "failed", "error"}:
+        mark_attempt_failed(attempt)
+        return _frontend_payment_result(attempt.order.order_number, "cancelled")
     try:
         verify_nagad_payment(attempt)
     except GatewayError as error:
         logger.warning("Nagad verification failed for order %s: %s", attempt.order.order_number, error)
         return _frontend_payment_result(attempt.order.order_number, "failed")
     return _frontend_payment_result(attempt.order.order_number, "success")
-

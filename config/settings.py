@@ -3,6 +3,7 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
+import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR=Path(__file__).resolve().parent.parent
@@ -18,7 +19,17 @@ MIDDLEWARE=["django.middleware.security.SecurityMiddleware","corsheaders.middlew
 ROOT_URLCONF="config.urls"
 TEMPLATES=[{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.debug","django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
 WSGI_APPLICATION="config.wsgi.application"
-DATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","NAME":BASE_DIR/"db.sqlite3"}}
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL:
+ DATABASES = {
+  "default": dj_database_url.parse(
+   DATABASE_URL,
+   conn_max_age=600,
+   ssl_require=not DEBUG,
+  )
+ }
+else:
+ DATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","NAME":BASE_DIR/"db.sqlite3"}}
 AUTH_PASSWORD_VALIDATORS=[]
 LANGUAGE_CODE="en-us"
 TIME_ZONE="Asia/Dhaka"
@@ -28,7 +39,10 @@ STATIC_URL="static/"
 DEFAULT_AUTO_FIELD="django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS=[
  origin.strip().rstrip("/")
- for origin in os.environ.get("CORS_ALLOWED_ORIGINS","https://t-shoe-bd.vercel.app,http://localhost:3000").split(",")
+ for origin in os.environ.get(
+  "CORS_ALLOWED_ORIGINS",
+  "https://t-shoe-bd.vercel.app,http://localhost:3000,http://127.0.0.1:3000",
+ ).split(",")
  if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True

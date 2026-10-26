@@ -26,6 +26,7 @@ class Order(models.Model):
         ("Nagad", "Nagad"),
         ("Bank Account", "Bank Account"),
         ("Cash on Delivery", "Cash on Delivery"),
+        ("Outlet Pick & Pay", "Outlet Pick & Pay"),
     ]
     STATUS_CHOICES = [
         ("pending", "Pending"),
@@ -54,6 +55,10 @@ class Order(models.Model):
     shipping_fee = models.PositiveIntegerField(default=0)
     discount = models.PositiveIntegerField(default=0)
     delivery_method = models.CharField(max_length=40, default="Standard Courier")
+    pickup_outlet = models.CharField(max_length=20, blank=True, choices=[
+        ("Rajshahi", "Rajshahi"),
+        ("Bogura", "Bogura"),
+    ])
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

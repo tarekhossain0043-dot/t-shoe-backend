@@ -46,7 +46,7 @@ def _order_data(order):
     }
     items = [
         {
-            "product": product_data(item.product),
+            "product": {**product_data(item.product), "price": item.unit_price},
             "qty": item.quantity,
             "size": item.size,
         }
@@ -72,6 +72,7 @@ def _order_data(order):
         "payment": order.payment_method,
         "paymentStatus": order.payment_status,
         "delivery": order.delivery_method,
+        "pickupOutlet": order.pickup_outlet,
         "placedAt": order.created_at.isoformat(),
         "status": status_labels[order.status],
     }
@@ -102,6 +103,23 @@ def create_order(request):
     delivery_method = str(data.get("delivery_method", ""))
     if delivery_method not in DELIVERY_FEES:
         return Response({"detail": "Choose a valid delivery method."}, status=status.HTTP_400_BAD_REQUEST)
+    pickup_outlet = str(data.get("pickup_outlet", "")).strip()
+    if payment_method == "Outlet Pick & Pay":
+        if delivery_method != "Hub Pickup":
+            return Response(
+                {"detail": "Choose Hub Pickup to pay at an outlet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if pickup_outlet not in {"Rajshahi", "Bogura"}:
+            return Response(
+                {"detail": "Choose Rajshahi or Bogura as your pickup outlet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    elif pickup_outlet:
+        return Response(
+            {"detail": "An outlet can only be selected for Outlet Pick & Pay."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     coupon_code = str(data.get("coupon_code", "")).strip().upper()
     if coupon_code and coupon_code not in COUPON_DISCOUNTS:
         return Response({"detail": "That coupon code is not valid."}, status=status.HTTP_400_BAD_REQUEST)
@@ -132,6 +150,7 @@ def create_order(request):
                 payment_status="pending" if payment_method in ONLINE_PAYMENT_METHODS else "unpaid",
                 shipping_fee=DELIVERY_FEES[delivery_method],
                 delivery_method=delivery_method,
+                pickup_outlet=pickup_outlet,
             )
             subtotal = 0
             for item in items:

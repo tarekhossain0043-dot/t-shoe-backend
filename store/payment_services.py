@@ -339,4 +339,16 @@ def _mark_attempt_paid(attempt, transaction_id):
         locked_attempt.provider_transaction_id = transaction_id
         locked_attempt.save(update_fields=["status", "provider_transaction_id", "updated_at"])
         order.payment_status = "paid"
-        order.save(update_fields=["payment_status"])
+        update_fields = ["payment_status"]
+        if order.status == "pending":
+            order.status = "confirmed"
+            update_fields.append("status")
+        order.save(update_fields=update_fields)
+
+
+def mark_attempt_failed(attempt):
+    with transaction.atomic():
+        locked_attempt = PaymentAttempt.objects.select_for_update().get(pk=attempt.pk)
+        if locked_attempt.status != "paid":
+            locked_attempt.status = "failed"
+            locked_attempt.save(update_fields=["status", "updated_at"])
