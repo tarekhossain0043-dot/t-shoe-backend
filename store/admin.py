@@ -46,6 +46,9 @@ class OrderAdmin(admin.ModelAdmin):
         "order_number",
         "customer_name",
         "phone",
+        "city",
+        "area",
+        "delivery_method",
         "total",
         "payment_method",
         "payment_status",
@@ -53,7 +56,7 @@ class OrderAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("status", "payment_method", "payment_status", "delivery_method", "created_at")
-    search_fields = ("order_number", "customer_name", "phone", "email", "user__email")
+    search_fields = ("order_number", "customer_name", "phone", "email", "city", "area", "road", "house", "delivery_notes", "user__email")
     readonly_fields = ("order_number", "created_at")
     inlines = [OrderItemInline, PaymentAttemptInline]
     date_hierarchy = "created_at"
