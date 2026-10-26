@@ -191,6 +191,32 @@ class OrderAndPaymentTests(APITestCase):
         self.assertEqual(response.data["orders"][0]["subtotal"], 2000)
         self.assertEqual(response.data["orders"][0]["items"][0]["product"]["price"], 1000)
 
+    def test_guest_cod_order_persists_all_checkout_delivery_fields(self):
+        payload = self.order_payload(payment_method="Cash on Delivery")
+        payload.update({
+            "area": "Jaleshwaritola",
+            "road": "Road 4, Block B",
+            "house": "House 12, Flat 3A",
+            "notes": "Call before arriving",
+            "address": "House 12, Flat 3A, Road 4, Block B, Jaleshwaritola, Delivery notes: Call before arriving",
+        })
+
+        response = self.client.post(self.order_url, payload, format="json")
+
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(order_number=response.data["order_number"])
+        self.assertIsNone(order.user)
+        self.assertEqual(order.customer_name, payload["name"])
+        self.assertEqual(order.phone, payload["phone"])
+        self.assertEqual(order.email, payload["email"])
+        self.assertEqual(order.city, payload["city"])
+        self.assertEqual(order.area, "Jaleshwaritola")
+        self.assertEqual(order.road, "Road 4, Block B")
+        self.assertEqual(order.house, "House 12, Flat 3A")
+        self.assertEqual(order.delivery_notes, "Call before arriving")
+        self.assertEqual(order.payment_method, "Cash on Delivery")
+        self.assertEqual(order.items.count(), 1)
+
     def test_outlet_pickup_requires_a_pickup_delivery_and_selected_outlet(self):
         payload = self.order_payload(payment_method="Outlet Pick & Pay")
         payload["delivery_method"] = "Hub Pickup"
