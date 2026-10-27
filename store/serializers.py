@@ -3,6 +3,9 @@ from .models import Product
 
 def product_brand(product):
     category = (product.category or "").strip()
+    explicit_brand = (getattr(product, "brand", "") or "").strip()
+    if explicit_brand:
+        return explicit_brand
     text = f"{product.name} {category}".lower()
     if "new balance" in text:
         return "New Balance"
@@ -23,6 +26,8 @@ def product_data(p):
         "category": p.category,
         "brand": product_brand(p),
         "price": p.price,
+        "stock_quantity": p.stock_quantity,
+        "in_stock": p.stock_quantity > 0,
         "image": p.image,
         "description": p.description,
     }
