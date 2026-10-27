@@ -10,7 +10,9 @@ def generate_order_number():
 class Product(models.Model):
     name = models.CharField(max_length=160)
     category = models.CharField(max_length=80, default="Sneakers")
+    brand = models.CharField(max_length=80, blank=True, default="")
     price = models.PositiveIntegerField()
+    stock_quantity = models.PositiveIntegerField(default=0)
     image = models.URLField()
     description = models.TextField(blank=True)
     active = models.BooleanField(default=True)
