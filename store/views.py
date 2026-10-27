@@ -23,7 +23,7 @@ COUPON_DISCOUNTS = {
     "NEWKE10": 500,
     "NEWKEDHAKA10": 550,
 }
-SHOE_SIZES = {"39", "40", "41", "42", "43", "44"}
+SHOE_SIZES = {"39", "40", "41", "42", "42.5", "43", "44", "45", "46"}
 ONLINE_PAYMENT_METHODS = {"bKash", "Nagad"}
 
 
