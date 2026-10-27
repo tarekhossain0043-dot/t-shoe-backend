@@ -88,8 +88,8 @@ def create_order(request):
         return Response({"detail": "Missing required fields: " + ", ".join(missing)}, status=status.HTTP_400_BAD_REQUEST)
 
     payment_method = str(data["payment_method"])
-    if payment_method not in {choice[0] for choice in Order.PAYMENT_CHOICES}:
-        return Response({"detail": "Unsupported payment method."}, status=status.HTTP_400_BAD_REQUEST)
+    if payment_method != "Cash on Delivery":
+        return Response({"detail": "Cash on Delivery is the only enabled payment method right now."}, status=status.HTTP_400_BAD_REQUEST)
     if payment_method in ONLINE_PAYMENT_METHODS and not request.user.is_authenticated:
         return Response(
             {"detail": "Sign in before placing a bKash or Nagad order."},
