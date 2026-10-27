@@ -23,12 +23,16 @@ if not SECRET_KEY:
         )
 
 ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.environ.get(
-        "DJANGO_ALLOWED_HOSTS",
-        "127.0.0.1,localhost,t-shoe-backend-1.onrender.com",
-    ).split(",")
-    if host.strip()
+#     host.strip()
+#     for host in os.environ.get(
+#         "DJANGO_ALLOWED_HOSTS",
+#         "127.0.0.1,localhost,t-shoe-backend-1.onrender.com",
+#     ).split(",")
+#     if host.strip()
+     "127.0.0.1",
+    "localhost",
+    "t-shoe-backend-1.onrender.com",
+    ".onrender.com" 
 ]
 
 INSTALLED_APPS = [
