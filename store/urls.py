@@ -6,6 +6,11 @@ from . import payment_views
 urlpatterns=[
  path("health/",views.health),
  path("products/",views.products),
+ path("admin/dashboard/", views.admin_dashboard),
+ path("admin/products/", views.admin_products),
+ path("admin/products/<int:product_id>/", views.admin_product_detail),
+ path("admin/orders/", views.admin_orders),
+ path("admin/orders/<str:order_number>/", views.admin_order_detail),
  path("orders/",views.create_order),
  path("orders/history/",views.order_history),
  path("payments/<str:provider>/start/",payment_views.start_payment),
