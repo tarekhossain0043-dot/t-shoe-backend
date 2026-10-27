@@ -214,3 +214,175 @@ def order_history(request):
 @require_GET
 def health(request):
     return JsonResponse({"status": "ok", "service": "T-Shoe API"})
+
+
+# All management endpoints below are restricted to Django staff/superusers.
+from datetime import timedelta
+from django.db.models import Count, Sum
+from django.utils import timezone
+from rest_framework.permissions import IsAdminUser
+
+
+def _admin_product_data(product):
+    return {
+        **product_data(product),
+        "active": product.active,
+        "stock_quantity": product.stock_quantity,
+        "created_at": product.created_at.isoformat(),
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_dashboard(request):
+    today = timezone.localdate()
+    start = today - timedelta(days=29)
+    delivered = Order.objects.filter(status="delivered")
+    non_cancelled = Order.objects.exclude(status="cancelled")
+    daily_orders = []
+    daily_sales = []
+    for offset in range(30):
+        day = start + timedelta(days=offset)
+        day_orders = Order.objects.filter(created_at__date=day).exclude(status="cancelled")
+        day_delivered = delivered.filter(created_at__date=day)
+        daily_orders.append({"date": day.isoformat(), "orders": day_orders.count()})
+        daily_sales.append({"date": day.isoformat(), "sales": day_delivered.aggregate(total=Sum("total"))["total"] or 0})
+    best_sellers = list(
+        OrderItem.objects.filter(order__status="delivered")
+        .values("product_id", "product__name")
+        .annotate(quantity=Sum("quantity"), revenue=Sum("unit_price") * Sum("quantity"))
+        .order_by("-quantity")[:8]
+    )
+    return Response({
+        "metrics": {
+            "total_sales": delivered.aggregate(total=Sum("total"))["total"] or 0,
+            "total_sale_items": OrderItem.objects.filter(order__status="delivered").aggregate(total=Sum("quantity"))["total"] or 0,
+            "total_products": Product.objects.filter(active=True).count(),
+            "in_stock_products": Product.objects.filter(active=True, stock_quantity__gt=0).count(),
+            "out_of_stock_products": Product.objects.filter(active=True, stock_quantity=0).count(),
+            "total_orders": Order.objects.count(),
+            "pending_orders": Order.objects.filter(status="pending").count(),
+            "cancelled_orders": Order.objects.filter(status="cancelled").count(),
+            "customers": Order.objects.values("phone").distinct().count(),
+            "pending_value": non_cancelled.filter(status__in=["pending", "confirmed", "shipped"]).aggregate(total=Sum("total"))["total"] or 0,
+        },
+        "daily_orders": daily_orders,
+        "daily_sales": daily_sales,
+        "best_sellers": best_sellers,
+    })
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminUser])
+def admin_products(request):
+    if request.method == "GET":
+        products_qs = Product.objects.all().order_by("-created_at")
+        search = str(request.query_params.get("search", "")).strip()
+        if search:
+            from django.db.models import Q
+            products_qs = products_qs.filter(Q(name__icontains=search) | Q(brand__icontains=search) | Q(category__icontains=search))
+        return Response([_admin_product_data(product) for product in products_qs])
+
+    data = request.data
+    try:
+        name = str(data.get("name", "")).strip()
+        category = str(data.get("category", "Sneakers")).strip()
+        brand = str(data.get("brand", "")).strip()
+        price = int(data.get("price", 0))
+        stock_quantity = int(data.get("stock_quantity", 0))
+        image = str(data.get("image", "")).strip()
+        description = str(data.get("description", "")).strip()
+        if not name or len(name) > 160 or not category or len(category) > 80:
+            raise ValueError("Enter a valid product name and category.")
+        if price < 0 or stock_quantity < 0:
+            raise ValueError("Price and stock must be zero or greater.")
+        if not image.startswith(("https://", "http://")):
+            raise ValueError("Enter a valid product image URL.")
+        product = Product.objects.create(
+            name=name, category=category, brand=brand[:80], price=price,
+            stock_quantity=stock_quantity, image=image, description=description, active=True,
+        )
+        return Response(_admin_product_data(product), status=status.HTTP_201_CREATED)
+    except (TypeError, ValueError, OverflowError) as error:
+        return Response({"detail": str(error) or "Invalid product data."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAdminUser])
+def admin_product_detail(request, product_id):
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        # Keep order history and its protected product references intact.
+        product.active = False
+        product.save(update_fields=["active"])
+        return Response({"detail": "Product archived and hidden from the storefront."}, status=status.HTTP_200_OK)
+
+    data = request.data
+    try:
+        if "name" in data:
+            product.name = str(data["name"]).strip()
+            if not product.name or len(product.name) > 160:
+                raise ValueError("Enter a valid product name.")
+        if "category" in data:
+            product.category = str(data["category"]).strip()
+        if "brand" in data:
+            product.brand = str(data["brand"]).strip()[:80]
+        if "price" in data:
+            product.price = int(data["price"])
+            if product.price < 0:
+                raise ValueError("Price must be zero or greater.")
+        if "stock_quantity" in data:
+            product.stock_quantity = int(data["stock_quantity"])
+            if product.stock_quantity < 0:
+                raise ValueError("Stock must be zero or greater.")
+        if "image" in data:
+            product.image = str(data["image"]).strip()
+            if not product.image.startswith(("https://", "http://")):
+                raise ValueError("Enter a valid product image URL.")
+        if "description" in data:
+            product.description = str(data["description"]).strip()
+        if "active" in data:
+            product.active = bool(data["active"])
+        product.save()
+        return Response(_admin_product_data(product))
+    except (TypeError, ValueError, OverflowError) as error:
+        return Response({"detail": str(error) or "Invalid product data."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_orders(request):
+    queryset = Order.objects.prefetch_related("items__product").order_by("-created_at")
+    status_filter = str(request.query_params.get("status", "")).strip()
+    if status_filter and status_filter in {choice[0] for choice in Order.STATUS_CHOICES}:
+        queryset = queryset.filter(status=status_filter)
+    search = str(request.query_params.get("search", "")).strip()
+    if search:
+        from django.db.models import Q
+        queryset = queryset.filter(
+            Q(order_number__icontains=search) | Q(customer_name__icontains=search)
+            | Q(phone__icontains=search) | Q(email__icontains=search)
+        )
+    return Response([_order_data(order) for order in queryset[:500]])
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAdminUser])
+def admin_order_detail(request, order_number):
+    try:
+        order = Order.objects.get(order_number=order_number)
+    except Order.DoesNotExist:
+        return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        order.delete()
+        return Response({"detail": "Order permanently deleted."}, status=status.HTTP_200_OK)
+    next_status = str(request.data.get("status", "")).strip()
+    valid_statuses = {choice[0] for choice in Order.STATUS_CHOICES}
+    if next_status not in valid_statuses:
+        return Response({"detail": "Choose a valid order status."}, status=status.HTTP_400_BAD_REQUEST)
+    order.status = next_status
+    order.save(update_fields=["status"])
+    return Response(_order_data(order))
