@@ -174,6 +174,10 @@ def create_order(request):
                 if size not in SHOE_SIZES:
                     raise ValueError("Invalid shoe size.")
                 product = Product.objects.get(pk=product_id, active=True)
+                if product.stock_quantity < quantity:
+                    raise ValueError(f"Only {product.stock_quantity} unit(s) of {product.name} are currently in stock.")
+                product.stock_quantity -= quantity
+                product.save(update_fields=["stock_quantity"])
                 OrderItem.objects.create(
                     order=order,
                     product=product,
@@ -184,7 +188,8 @@ def create_order(request):
                 subtotal += product.price * quantity
             order.discount = min(COUPON_DISCOUNTS.get(coupon_code, 0), subtotal)
             order.total = max(0, subtotal + order.shipping_fee - order.discount)
-            order.save(update_fields=["discount", "total"])
+            order.stock_reserved = True
+            order.save(update_fields=["discount", "total", "stock_reserved"])
     except Product.DoesNotExist:
         return Response({"detail": "One of the products is unavailable."}, status=status.HTTP_400_BAD_REQUEST)
     except (ValueError, KeyError, TypeError, OverflowError) as error:
@@ -382,12 +387,39 @@ def admin_order_detail(request, order_number):
     except Order.DoesNotExist:
         return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "DELETE":
-        order.delete()
-        return Response({"detail": "Order permanently deleted."}, status=status.HTTP_200_OK)
+        with transaction.atomic():
+            if order.stock_reserved:
+                for item in order.items.select_related("product").all():
+                    product = Product.objects.select_for_update().get(pk=item.product_id)
+                    product.stock_quantity += item.quantity
+                    product.save(update_fields=["stock_quantity"])
+            order.delete()
+        return Response({"detail": "Order permanently deleted and reserved stock restored."}, status=status.HTTP_200_OK)
     next_status = str(request.data.get("status", "")).strip()
     valid_statuses = {choice[0] for choice in Order.STATUS_CHOICES}
     if next_status not in valid_statuses:
         return Response({"detail": "Choose a valid order status."}, status=status.HTTP_400_BAD_REQUEST)
-    order.status = next_status
-    order.save(update_fields=["status"])
+    with transaction.atomic():
+        if next_status == "cancelled" and order.stock_reserved:
+            for item in order.items.select_related("product").all():
+                product = Product.objects.select_for_update().get(pk=item.product_id)
+                product.stock_quantity += item.quantity
+                product.save(update_fields=["stock_quantity"])
+            order.stock_reserved = False
+            order.save(update_fields=["status", "stock_reserved"])
+        elif order.status == "cancelled" and next_status != "cancelled" and not order.stock_reserved:
+            items = list(order.items.select_related("product").all())
+            for item in items:
+                product = Product.objects.select_for_update().get(pk=item.product_id)
+                if product.stock_quantity < item.quantity:
+                    return Response({"detail": f"Not enough stock to reopen this order for {product.name}."}, status=status.HTTP_400_BAD_REQUEST)
+            for item in items:
+                product = Product.objects.select_for_update().get(pk=item.product_id)
+                product.stock_quantity -= item.quantity
+                product.save(update_fields=["stock_quantity"])
+            order.stock_reserved = True
+            order.save(update_fields=["status", "stock_reserved"])
+        else:
+            order.status = next_status
+            order.save(update_fields=["status"])
     return Response(_order_data(order))
