@@ -26,7 +26,7 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get(
         "DJANGO_ALLOWED_HOSTS",
-        "127.0.0.1,localhost,t-shoe-backend.onrender.com",
+        "127.0.0.1,localhost,t-shoe-backend-1.onrender.com",
     ).split(",")
     if host.strip()
 ]
@@ -132,7 +132,7 @@ SIMPLE_JWT = {
 }
 
 BACKEND_PUBLIC_URL = os.environ.get(
-    "BACKEND_PUBLIC_URL", "https://t-shoe-backend.onrender.com"
+    "BACKEND_PUBLIC_URL", "https://t-shoe-backend-1.onrender.com"
 ).rstrip("/")
 FRONTEND_URL = os.environ.get(
     "FRONTEND_URL", "https://t-shoes.vercel.app"
