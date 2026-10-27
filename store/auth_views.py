@@ -22,6 +22,8 @@ def member_data(user):
         "name": user.first_name or user.username,
         "phone": user.username,
         "email": user.email,
+        "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
     }
 
 
