@@ -218,7 +218,7 @@ def health(request):
 
 # All management endpoints below are restricted to Django staff/superusers.
 from datetime import timedelta
-from django.db.models import Count, Sum
+from django.db.models import F, Sum
 from django.utils import timezone
 from rest_framework.permissions import IsAdminUser
 
@@ -250,7 +250,7 @@ def admin_dashboard(request):
     best_sellers = list(
         OrderItem.objects.filter(order__status="delivered")
         .values("product_id", "product__name")
-        .annotate(quantity=Sum("quantity"), revenue=Sum("unit_price") * Sum("quantity"))
+        .annotate(quantity=Sum("quantity"), revenue=Sum(F("unit_price") * F("quantity")) )
         .order_by("-quantity")[:8]
     )
     return Response({
@@ -366,7 +366,12 @@ def admin_orders(request):
             Q(order_number__icontains=search) | Q(customer_name__icontains=search)
             | Q(phone__icontains=search) | Q(email__icontains=search)
         )
-    return Response([_order_data(order) for order in queryset[:500]])
+    results = []
+    for order in queryset[:500]:
+        item = _order_data(order)
+        item["status"] = order.status
+        results.append(item)
+    return Response(results)
 
 
 @api_view(["PATCH", "DELETE"])
