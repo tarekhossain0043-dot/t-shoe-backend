@@ -58,6 +58,7 @@ class Order(models.Model):
     payment_status = models.CharField(max_length=20, default="unpaid")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     total = models.PositiveIntegerField(default=0)
+    stock_reserved = models.BooleanField(default=False)
     shipping_fee = models.PositiveIntegerField(default=0)
     discount = models.PositiveIntegerField(default=0)
     delivery_method = models.CharField(max_length=40, default="Standard Courier")
