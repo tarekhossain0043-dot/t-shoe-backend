@@ -7,9 +7,9 @@ from .models import Order, OrderItem, PaymentAttempt, Product
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "price", "active", "created_at")
-    list_filter = ("category", "active")
-    search_fields = ("name", "category")
+    list_display = ("name", "brand", "category", "price", "stock_quantity", "active", "created_at")
+    list_filter = ("brand", "category", "active")
+    search_fields = ("name", "brand", "category")
 
 
 class OrderItemInline(admin.TabularInline):
