@@ -266,6 +266,7 @@ def admin_dashboard(request):
     return Response({
         "metrics": {
             "total_sales": delivered.aggregate(total=Sum("total"))["total"] or 0,
+            "total_order_value": non_cancelled.aggregate(total=Sum("total"))["total"] or 0,
             "total_sale_items": OrderItem.objects.filter(order__status="delivered").aggregate(total=Sum("quantity"))["total"] or 0,
             "total_products": Product.objects.filter(active=True).count(),
             "in_stock_products": Product.objects.filter(active=True, stock_quantity__gt=0).count(),
