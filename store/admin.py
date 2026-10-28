@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Order, OrderItem, PaymentAttempt, Product
+from .models import CustomerProductAction, Order, OrderItem, PaymentAttempt, Product, StoreNotification
 
 
 @admin.register(Product)
@@ -104,3 +104,19 @@ class PaymentAttemptAdmin(admin.ModelAdmin):
 User = get_user_model()
 if not admin.site.is_registered(User):
     admin.site.register(User, UserAdmin)
+
+
+
+@admin.register(StoreNotification)
+class StoreNotificationAdmin(admin.ModelAdmin):
+    list_display = ("title", "level", "active", "created_at", "updated_at")
+    list_filter = ("level", "active", "created_at")
+    search_fields = ("title", "message")
+
+
+@admin.register(CustomerProductAction)
+class CustomerProductActionAdmin(admin.ModelAdmin):
+    list_display = ("action", "product", "session_key", "user", "active", "updated_at")
+    list_filter = ("action", "active", "updated_at")
+    search_fields = ("product__name", "session_key", "user__email")
+    readonly_fields = ("session_key", "product", "action", "user", "created_at", "updated_at")
