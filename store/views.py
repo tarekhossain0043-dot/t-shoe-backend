@@ -71,6 +71,8 @@ def _order_data(order):
         "total": order.total,
         "payment": order.payment_method,
         "paymentStatus": order.payment_status,
+        "senderPhone": order.sender_phone,
+        "transactionId": order.transaction_id,
         "delivery": order.delivery_method,
         "pickupOutlet": order.pickup_outlet,
         "placedAt": order.created_at.isoformat(),
@@ -88,13 +90,14 @@ def create_order(request):
         return Response({"detail": "Missing required fields: " + ", ".join(missing)}, status=status.HTTP_400_BAD_REQUEST)
 
     payment_method = str(data["payment_method"])
-    if payment_method != "Cash on Delivery":
-        return Response({"detail": "Cash on Delivery is the only enabled payment method right now."}, status=status.HTTP_400_BAD_REQUEST)
-    if payment_method in ONLINE_PAYMENT_METHODS and not request.user.is_authenticated:
-        return Response(
-            {"detail": "Sign in before placing a bKash or Nagad order."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
+    if payment_method not in {"Cash on Delivery", "bKash", "Nagad", "Outlet Pick & Pay"}:
+        return Response({"detail": "Choose a supported payment method."}, status=status.HTTP_400_BAD_REQUEST)
+    sender_phone = str(data.get("sender_phone", "")).strip()
+    transaction_id = str(data.get("transaction_id", "")).strip()
+    if payment_method in ONLINE_PAYMENT_METHODS and (not sender_phone or not transaction_id):
+        return Response({"detail": "Sender phone and transaction ID are required for manual payment."}, status=status.HTTP_400_BAD_REQUEST)
+    if len(sender_phone) > 30 or len(transaction_id) > 128:
+        return Response({"detail": "Sender phone or transaction ID is too long."}, status=status.HTTP_400_BAD_REQUEST)
 
     items = data["items"]
     if not isinstance(items, list) or not items:
@@ -158,6 +161,8 @@ def create_order(request):
                 city=city,
                 payment_method=payment_method,
                 payment_status="pending" if payment_method in ONLINE_PAYMENT_METHODS else "unpaid",
+                sender_phone=sender_phone,
+                transaction_id=transaction_id,
                 shipping_fee=DELIVERY_FEES[delivery_method],
                 delivery_method=delivery_method,
                 pickup_outlet=pickup_outlet,
