@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Order, OrderItem, Product
+from .models import CustomerProductAction, Order, OrderItem, Product, StoreNotification
 from .serializers import product_data
 
 
@@ -429,3 +429,104 @@ def admin_order_detail(request, order_number):
             order.status = next_status
             order.save(update_fields=["status"])
     return Response(_order_data(order))
+
+
+
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+def customer_product_actions(request):
+    """Persist wishlist/compare toggles per browser session; no customer PII is required."""
+    if request.method == "GET":
+        session_key = str(request.query_params.get("session_key", "")).strip()
+        if not session_key or len(session_key) > 80:
+            return Response({"detail": "A valid session_key is required."}, status=status.HTTP_400_BAD_REQUEST)
+        rows = CustomerProductAction.objects.filter(session_key=session_key, active=True).select_related("product")
+        return Response([{"product_id": row.product_id, "action": row.action} for row in rows])
+
+    session_key = str(request.data.get("session_key", "")).strip()
+    action = str(request.data.get("action", "")).strip()
+    if not session_key or len(session_key) > 80 or action not in {"wishlist", "compare"}:
+        return Response({"detail": "A valid session_key and action are required."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        product_id = int(request.data.get("product_id"))
+        product = Product.objects.get(pk=product_id, active=True)
+    except (TypeError, ValueError, Product.DoesNotExist):
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+    active = bool(request.data.get("active", True))
+    row, _ = CustomerProductAction.objects.update_or_create(
+        session_key=session_key, product=product, action=action,
+        defaults={"active": active, "user": request.user if request.user.is_authenticated else None},
+    )
+    return Response({"product_id": row.product_id, "action": row.action, "active": row.active})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminUser])
+def admin_notifications(request):
+    if request.method == "GET":
+        return Response([{
+            "id": item.id, "title": item.title, "message": item.message,
+            "level": item.level, "active": item.active,
+            "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat(),
+        } for item in StoreNotification.objects.all()[:300]])
+    title = str(request.data.get("title", "")).strip()
+    message = str(request.data.get("message", "")).strip()
+    level = str(request.data.get("level", "info")).strip()
+    if not title or len(title) > 160 or not message or level not in {"info", "success", "warning", "urgent"}:
+        return Response({"detail": "Enter a title, message and valid notification level."}, status=status.HTTP_400_BAD_REQUEST)
+    item = StoreNotification.objects.create(title=title, message=message, level=level, active=bool(request.data.get("active", True)))
+    return Response({"id": item.id, "title": item.title, "message": item.message, "level": item.level, "active": item.active, "created_at": item.created_at.isoformat()}, status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAdminUser])
+def admin_notification_detail(request, notification_id):
+    try:
+        item = StoreNotification.objects.get(pk=notification_id)
+    except StoreNotification.DoesNotExist:
+        return Response({"detail": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        item.delete()
+        return Response({"detail": "Notification deleted."})
+    if "title" in request.data:
+        title = str(request.data.get("title", "")).strip()
+        if not title or len(title) > 160:
+            return Response({"detail": "Enter a valid notification title."}, status=status.HTTP_400_BAD_REQUEST)
+        item.title = title
+    if "message" in request.data:
+        message = str(request.data.get("message", "")).strip()
+        if not message:
+            return Response({"detail": "Notification message cannot be empty."}, status=status.HTTP_400_BAD_REQUEST)
+        item.message = message
+    if "level" in request.data:
+        level = str(request.data.get("level", "")).strip()
+        if level not in {"info", "success", "warning", "urgent"}:
+            return Response({"detail": "Choose a valid notification level."}, status=status.HTTP_400_BAD_REQUEST)
+        item.level = level
+    if "active" in request.data:
+        item.active = bool(request.data.get("active"))
+    item.save()
+    return Response({"id": item.id, "title": item.title, "message": item.message, "level": item.level, "active": item.active, "created_at": item.created_at.isoformat()})
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_customer_actions(request):
+    action = str(request.query_params.get("action", "")).strip()
+    queryset = CustomerProductAction.objects.filter(active=True).select_related("product", "user")
+    if action in {"wishlist", "compare"}:
+        queryset = queryset.filter(action=action)
+    return Response([{
+        "id": row.id, "product_id": row.product_id, "product_name": row.product.name,
+        "action": row.action, "session_key": row.session_key,
+        "customer": row.user.email if row.user else (row.user.username if row.user else "Guest"),
+        "updated_at": row.updated_at.isoformat(),
+    } for row in queryset[:1000]])
+
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_notifications(request):
+    return Response([{"id": item.id, "title": item.title, "message": item.message, "level": item.level}
+                     for item in StoreNotification.objects.filter(active=True)[:50]])
