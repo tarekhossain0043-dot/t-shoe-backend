@@ -75,7 +75,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 if DATABASE_URL:
-    if not DATABASE_URL.startswith(("postgres://", "postgresql://t_shoe_db_user:9837FuIGsaDJ4OKrhca0j321bhB7UeCr@dpg-dbg6pd6gekts73b9p4sg-a/t_shoe_db")):
+    if not DATABASE_URL.startswith(("postgres://", "postgresql://")):
         raise ImproperlyConfigured(
             "DATABASE_URL must be a PostgreSQL connection URL, not an API/HTTP URL. "
             "Use the Internal Database URL from your Render PostgreSQL database."
