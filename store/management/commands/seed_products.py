@@ -13,5 +13,5 @@ class Command(BaseCommand):
  help="Create demo T-Shoe products"
  def handle(self,*args,**kwargs):
   for name,category,price,image,description in ITEMS:
-   Product.objects.update_or_create(name=name,defaults={"category":category,"price":price,"image":image,"description":description,"active":True})
-  self.stdout.write(self.style.SUCCESS("Demo products created/updated."))
+   Product.objects.update_or_create(name=name,defaults={"category":category,"price":price,"image":image,"description":description,"stock_quantity":8,"active":True})
+  self.stdout.write(self.style.SUCCESS("Demo products created/updated with 8 units each. Use only for development/testing."))
