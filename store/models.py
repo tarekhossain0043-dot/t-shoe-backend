@@ -101,3 +101,40 @@ class PaymentAttempt(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+
+class StoreNotification(models.Model):
+    LEVEL_CHOICES = [("info", "Info"), ("success", "Success"), ("warning", "Warning"), ("urgent", "Urgent")]
+    title = models.CharField(max_length=160)
+    message = models.TextField()
+    level = models.CharField(max_length=12, choices=LEVEL_CHOICES, default="info")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class CustomerProductAction(models.Model):
+    ACTION_CHOICES = [("wishlist", "Wishlist"), ("compare", "Compare")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="product_actions")
+    session_key = models.CharField(max_length=80, db_index=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="customer_actions")
+    action = models.CharField(max_length=12, choices=ACTION_CHOICES)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["session_key", "product", "action"], name="unique_session_product_action")
+        ]
+
+    def __str__(self):
+        return f"{self.action}: {self.product.name}"
