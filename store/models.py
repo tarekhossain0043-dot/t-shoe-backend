@@ -56,6 +56,8 @@ class Order(models.Model):
     city = models.CharField(max_length=100)
     payment_method = models.CharField(max_length=30, choices=PAYMENT_CHOICES)
     payment_status = models.CharField(max_length=20, default="unpaid")
+    sender_phone = models.CharField(max_length=30, blank=True, default="")
+    transaction_id = models.CharField(max_length=128, blank=True, default="")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     total = models.PositiveIntegerField(default=0)
     stock_reserved = models.BooleanField(default=False)
